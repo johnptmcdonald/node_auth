@@ -1,9 +1,14 @@
+var configAuth = require('./auth')
+
 var LocalStrategy = require('passport-local').Strategy
+var FacebookStrategy = require('passport-facebook').Strategy
 
 var User = require('../app/models/User')
 
 module.exports = function(passport){
 
+
+	// ******* START SERIALIZE/DESERIALIZE ******** // 
 	// this takes the user.id and puts it into the session
 	passport.serializeUser(function(user, done){
 		// this 'done' function is an internal function of passport 
@@ -17,8 +22,51 @@ module.exports = function(passport){
 			done(err, user)
 		})
 	})
+	// ******* END SERIALIZE/DESERIALIZE ******** // 
 
 
+	// ******* START FACEBOOK STRATEGY ******** // 
+	passport.use('facebook', new FacebookStrategy({
+		clientID        : configAuth.facebookAuth.clientID,
+        clientSecret    : configAuth.facebookAuth.clientSecret,
+        callbackURL     : configAuth.facebookAuth.callbackURL,
+        profileFields: ['id', 'displayName', 'photos', 'email']
+
+	},
+	// facebook sends back the token and the profile
+	function(token, refreshToken, profile, done){
+		process.nextTick(function(){
+			User.findOne({'facebook.id': profile.id}, function(err, user){
+				if(err){
+					return done(err)
+				}
+				if(user){
+					// we found the user, log them in
+					return done(null, user)
+				} else {
+					// we haven't found the user, create them!
+					console.log(profile)
+					var newUser = new User()
+					newUser.facebook.id = profile.id
+					newUser.facebook.token = token
+					newUser.facebook.name = profile.displayName
+					newUser.facebook.email = profile.emails[0].value
+					newUser.facebook.photo = profile.photos[0].value
+
+					newUser.save(function(err){
+						if(err){
+							throw err
+						}
+						return done(null, newUser)
+					})
+				}
+			})
+		})
+	}
+	))
+	// ******* END FACEBOOK STRATEGY ******** // 
+
+	// ******* START LOCAL STRATEGY ******** // 
 	passport.use('local-signup', new LocalStrategy({
 		usernameField: 'email',
 		passwordField: 'password',
@@ -77,7 +125,7 @@ module.exports = function(passport){
         });
 
     }));
-
+	// ******* END LOCAL STRATEGY ******** // 
 }
 
 
